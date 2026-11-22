@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#07131f">
+<title>TLaztec Mini Sumo Control</title>
+<link rel="manifest" href="manifest.webmanifest">
+<style>
+:root{color-scheme:dark;--bg:#07131f;--panel:#102536;--cyan:#00d5ff;--muted:#8aa5b7;--line:#24465b}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top,#12344a,var(--bg) 55%);font-family:Arial,sans-serif;color:#eefaff}
+main{max-width:760px;margin:auto;padding:22px}.brand{letter-spacing:3px;color:var(--cyan);font-size:13px;font-weight:bold}
+h1{font-size:26px;margin:8px 0 4px}.sub{color:var(--muted);margin:0 0 20px}
+.panel{background:#102536eF;border:1px solid var(--line);border-radius:16px;padding:17px;margin:14px 0;box-shadow:0 12px 30px #0004}
+.status{display:flex;align-items:center;gap:9px;color:#ffc85c;font-weight:bold}.dot{width:9px;height:9px;border-radius:50%;background:currentColor}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}button{border:0;border-radius:10px;padding:13px 16px;font-weight:bold;background:var(--cyan);color:#00121b}button.secondary{background:#203e52;color:#eafaff}button:disabled{opacity:.45}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.metric{background:#0a1b29;border:1px solid var(--line);border-radius:12px;padding:14px}.label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}.value{font-size:27px;font-weight:bold;margin-top:7px}.unit{font-size:13px;color:var(--muted)}
+.log{font-family:monospace;color:#a8d9e9;white-space:pre-wrap;max-height:150px;overflow:auto;font-size:12px}
+footer{color:var(--muted);font-size:12px;text-align:center;padding:18px}
+@media(max-width:420px){main{padding:15px}.grid{gap:8px}.value{font-size:23px}}
+</style>
+</head>
+<body>
+<main>
+  <div class="brand">TLaztec Robotics</div>
+  <h1>Mini Sumo Control</h1>
+  <p class="sub">Panel de telemetría inalámbrica · ESP32-C3</p>
+
+  <section class="panel">
+    <div class="status"><span class="dot" id="dot"></span><span id="connection">DESCONECTADO</span></div>
+    <div class="actions">
+      <button id="connect">CONECTAR ESP32</button>
+      <button class="secondary" id="disconnect" disabled>DESCONECTAR</button>
+    </div>
+    <p class="sub" id="deviceName" style="margin:12px 0 0">Sin dispositivo conectado</p>
+  </section>
+
+  <section class="panel">
+    <div class="grid">
+      <div class="metric"><div class="label">Sensor izquierdo</div><div class="value" id="left">--</div><div class="unit">Lectura digital</div></div>
+      <div class="metric"><div class="label">Sensor derecho</div><div class="value" id="right">--</div><div class="unit">Lectura digital</div></div>
+      <div class="metric"><div class="label">Batería</div><div class="value" id="battery">--</div><div class="unit">Porcentaje reportado</div></div>
+      <div class="metric"><div class="label">Temperatura</div><div class="value" id="temperature">--</div><div class="unit">°C reportados</div></div>
+    </div>
+    <div class="metric" style="margin-top:12px"><div class="label">Estado del robot</div><div class="value" id="state">SIN DATOS</div></div>
+  </section>
+
+  <section class="panel">
+    <div class="label">Registro de conexión</div>
+    <div class="log" id="log">Listo. Conecta la ESP32-C3 para comenzar.</div>
+  </section>
+  <footer>TLaztec Mini Sumo Control · Prototipo v0.1</footer>
+</main>
+<script>
+const SERVICE_UUID='7b7e0001-7a5b-4d3c-9e2a-1f6a8b9c0001';
+const CHARACTERISTIC_UUID='7b7e0002-7a5b-4d3c-9e2a-1f6a8b9c0001';
+let device=null, characteristic=null;
+const $=id=>document.getElementById(id);
+function log(s){$('log').textContent=new Date().toLocaleTimeString()+'  '+s+'\\n'+$('log').textContent}
+function setConnected(ok){$('connection').textContent=ok?'CONECTADO':'DESCONECTADO';$('dot').style.color=ok?'#2ee59d':'#ffc85c';$('connect').disabled=ok;$('disconnect').disabled=!ok}
+function showData(d){
+  if(d.left!==undefined)$('left').textContent=d.left;
+  if(d.right!==undefined)$('right').textContent=d.right;
+  if(d.battery!==undefined)$('battery').textContent=d.battery+'%';
+  if(d.temperature!==undefined)$('temperature').textContent=d.temperature;
+  if(d.state!==undefined)$('state').textContent=d.state;
+}
+function onData(event){
+  const bytes=new Uint8Array(event.target.value.buffer,event.target.value.byteOffset,event.target.value.byteLength);
+  const raw=new TextDecoder().decode(bytes);
+  // ESP32 sends a short text prefix before the JSON payload; extract the JSON object.
+  const start=raw.indexOf('{'), end=raw.lastIndexOf('}');
+  if(start<0||end<start){log('Dato recibido: '+raw);return}
+  try{const data=JSON.parse(raw.slice(start,end+1));showData(data);log('Telemetría recibida: '+JSON.stringify(data))}
+  catch(e){log('No se pudo interpretar: '+raw)}
+}
+async function connect(){
+  if(!navigator.bluetooth){alert('Abre este prototipo en Chrome Android mediante HTTPS. Web Bluetooth no está disponible en este navegador/origen.');return}
+  try{
+    device=await navigator.bluetooth.requestDevice({filters:[{namePrefix:'TLAZTEC'}],optionalServices:[SERVICE_UUID]});
+    device.addEventListener('gattserverdisconnected',()=>{setConnected(false);$('deviceName').textContent='Sin dispositivo conectado';log('Dispositivo desconectado')});
+    const server=await device.gatt.connect();
+    const service=await server.getPrimaryService(SERVICE_UUID);
+    characteristic=await service.getCharacteristic(CHARACTERISTIC_UUID);
+    await characteristic.startNotifications();
+    characteristic.addEventListener('characteristicvaluechanged',onData);
+    $('deviceName').textContent=device.name||'ESP32-C3';
+    setConnected(true);log('Conectado a '+(device.name||'ESP32-C3')+'; notificaciones activadas');
+  }catch(e){log('Error: '+e.message);alert('No se pudo conectar: '+e.message)}
+}
+function disconnect(){if(device&&device.gatt.connected)device.gatt.disconnect()}
+$('connect').addEventListener('click',connect);$('disconnect').addEventListener('click',disconnect);
+</script>
+</body>
+</html>

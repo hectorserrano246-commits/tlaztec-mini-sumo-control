@@ -1,0 +1,8 @@
+{
+  "name": "TLaztec Mini Sumo Control",
+  "short_name": "TLaztec Sumo",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#07131f",
+  "theme_color": "#07131f"
+}
