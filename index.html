@@ -77,7 +77,7 @@ function onData(event){
 async function connect(){
   if(!navigator.bluetooth){alert('Abre este prototipo en Chrome Android mediante HTTPS. Web Bluetooth no está disponible en este navegador/origen.');return}
   try{
-    device=await navigator.bluetooth.requestDevice({filters:[{namePrefix:'TLAZTEC'}],optionalServices:[SERVICE_UUID]});
+    device=await navigator.bluetooth.requestDevice({filters:[{namePrefix:'Tlaztec'}],optionalServices:[SERVICE_UUID]});
     device.addEventListener('gattserverdisconnected',()=>{setConnected(false);$('deviceName').textContent='Sin dispositivo conectado';log('Dispositivo desconectado')});
     const server=await device.gatt.connect();
     const service=await server.getPrimaryService(SERVICE_UUID);
